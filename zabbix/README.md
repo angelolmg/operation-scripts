@@ -135,5 +135,5 @@ sudo crontab -e
 Add:
 
 ```cron
-0 3 1-7 * 1 /path/to/zabbix_montly_backup.sh >> /var/log/zabbix_montly_backup_raw.log 2>&1
+0 3 1-7 * 1 /path/to/zabbix_montly_backup.sh --execute >> /var/log/zabbix_montly_backup_raw.log 2>&1
 ```
