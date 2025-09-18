@@ -48,7 +48,7 @@ send_embed() {
     local chunk="$1"
     PAYLOAD=$(jq -n \
         --arg username "Zabbix Notifier" \
-        --arg avatar "/home/dtcnt/scripts/zabbix_logo.png" \
+        --arg avatar "https://raw.githubusercontent.com/angelolmg/operation-scripts/refs/heads/main/zabbix/zabbix_logo.png" \
         --arg script "$SCRIPT_NAME" \
         --arg content "$chunk" \
         --arg ip "$SERVER_IP" \
