@@ -41,13 +41,13 @@ else
 fi
 
 # Discord embed constraints
-MAX_LENGTH=1800  # leave buffer below 2048 chars
+MAX_LENGTH=4000  # leave buffer below 4096 chars
 
 # Function to send one embed chunk
 send_embed() {
     local chunk="$1"
     PAYLOAD=$(jq -n \
-        --arg username "Zabbix Notifier" \
+        --arg username "Zabbix Job Notifier" \
         --arg avatar "https://raw.githubusercontent.com/angelolmg/operation-scripts/refs/heads/main/zabbix/zabbix_logo.png" \
         --arg script "$SCRIPT_NAME" \
         --arg content "$chunk" \
@@ -58,10 +58,10 @@ send_embed() {
     '{
       username: $username,
       avatar_url: $avatar,
-      content: "Notification: \($status)",
+      content: "\($script): \($status)",
       embeds: [
         {
-          title: $script,
+          title: "",
           description: $content,
           color: $color,
           fields: [
