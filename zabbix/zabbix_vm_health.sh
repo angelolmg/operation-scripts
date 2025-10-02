@@ -53,13 +53,13 @@ ZABBIX_AGENT=$(check_service zabbix-agent)
 APACHE=$(check_service apache2)
 MARIADB=$(check_service mariadb)
 
-# Next backup (first Saturday of next month at 03:00)
-NEXT_BACKUP=$(date -d "$(date +'%Y-%m-01') +1 month" +'%Y-%m-01')
-NEXT_BACKUP=$(date -d "$NEXT_BACKUP +$(( (6 - $(date -d "$NEXT_BACKUP" +%u) + 7) %7 )) days 03:00" +%s)
-
-# Next partitioning (first Monday of next month at 03:00)
+# Next partitioning (first Saturday of next month at 01:00)
 NEXT_PART=$(date -d "$(date +'%Y-%m-01') +1 month" +'%Y-%m-01')
-NEXT_PART=$(date -d "$NEXT_PART +$(( (1 - $(date -d "$NEXT_PART" +%u) + 7) %7 )) days 03:00" +%s)
+NEXT_PART=$(date -d "$NEXT_PART +$(( (6 - $(date -d "$NEXT_PART" +%u) + 7) %7 )) days 01:00" +%s)
+
+# Next backup (first Sunday of next month at 01:00)
+NEXT_BACKUP=$(date -d "$(date +'%Y-%m-01') +1 month" +'%Y-%m-01')
+NEXT_BACKUP=$(date -d "$NEXT_BACKUP +$(( (7 - $(date -d "$NEXT_BACKUP" +%u) + 7) %7 )) days 01:00" +%s)
 
 DAYS_BACKUP=$(( (NEXT_BACKUP - NOW) / 86400 ))
 DAYS_PART=$(( (NEXT_PART - NOW) / 86400 ))

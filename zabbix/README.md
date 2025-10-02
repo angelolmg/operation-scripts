@@ -93,6 +93,8 @@ Add:
 * Includes **safety checks**: validates retention count, supports **dry-run mode** for testing.
 * Logs all operations to `/var/log/zabbix_backup.log`.
 
+* IMPORTANT: Setup swapfile to at least half the system's total RAM, otherwise `mysqldump` could run out of memory and the backup procedure could fail.
+
 ## Setup
 
 ### 1. Configure the script

@@ -74,7 +74,7 @@ if $DRY_RUN; then
     log_message "[DRY RUN] Would backup MySQL database '${DB_NAME}' to ${DB_BACKUP_FILE}"
 else
     log_message "Backing up MySQL database..."
-    mysqldump --single-transaction --routines --triggers -u"${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" | gzip > "${DB_BACKUP_FILE}"
+    mysqldump --single-transaction --quick --max_allowed_packet=512M --compress -u"${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" | gzip > "${DB_BACKUP_FILE}"
     log_message "Database backup successful."
 fi
 
