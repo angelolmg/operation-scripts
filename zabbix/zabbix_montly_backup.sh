@@ -91,13 +91,35 @@ fi
 
 # 4. Enforce retention policy
 log_message "Enforcing retention policy: keeping the latest ${RETENTION_COUNT} backups."
+
+# Command to identify files *beyond* the retention count
+# It lists all backups, sorts by time (newest first), then skips the first ${RETENTION_COUNT} files,
+# leaving only the old ones that are candidates for deletion.
+FILES_TO_DELETE=$(ls -1t "${BACKUP_DIR}"/zabbix-backup-*.tar.gz 2>/dev/null | tail -n +$((RETENTION_COUNT + 1)))
+
 if $DRY_RUN; then
     log_message "[DRY RUN] Would delete old backups beyond ${RETENTION_COUNT} months in ${BACKUP_DIR}"
+
+    if [ -z "$FILES_TO_DELETE" ]; then
+        log_message "[DRY RUN] NO files found to delete."
+    else
+        log_message "[DRY RUN] The following OLD files would be deleted:"
+        # Print the list of files to delete, one per line
+        echo "$FILES_TO_DELETE" | while read -r file; do
+            log_message "  -> Would delete: ${file}"
+        done
+    fi
+
 else
-    ls -1t "${BACKUP_DIR}"/zabbix-backup-*.tar.gz | tail -n +$((RETENTION_COUNT + 1)) | xargs -r rm
+    # EXECUTE mode: The actual deletion command remains the same
+    if [ -z "$FILES_TO_DELETE" ]; then
+        log_message "NO files found to delete."
+    else
+        log_message "Deleting old backups..."
+        # Use xargs to pass the files to rm, ensuring it handles spaces correctly
+        echo "$FILES_TO_DELETE" | xargs -r rm
+    fi
     log_message "Cleanup complete."
 fi
-
-log_message "--- Zabbix Full Backup Finished ---"
 
 exit 0
