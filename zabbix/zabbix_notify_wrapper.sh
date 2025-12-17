@@ -1,85 +1,116 @@
 #!/bin/bash
 
-# ---------------------------
-# Zabbix Script Notification Wrapper
-# With Discord Embed, Auto-Split, and Color Coding
+# -------------------------------------------------
+# Generic Script Notification Wrapper
+# - Executes any script
+# - Logs output
+# - Sends Discord webhook with embeds
+# - Auto-splits long output
+# - Color-coded by exit status
 #
-# sudo apt update
-# sudo apt install jq
-# sudo apt install curl
+# Dependencies:
+#   sudo apt install -y jq curl
+# -------------------------------------------------
+
+TARGET_SCRIPT="$1"
+shift
+TARGET_ARGS="$@"
+
+# ---------------------------
+# Configuration
 # ---------------------------
 
-SCRIPT_PATH="$1"
-shift
-SCRIPT_ARGS="$@"
-
+WEBHOOK_URL=""  # Discord webhook URL
 LOG_DIR="/var/log"
-SCRIPT_NAME=$(basename "$SCRIPT_PATH" .sh)
-LOG_FILE="${LOG_DIR}/${SCRIPT_NAME}_raw.log"
 
-WEBHOOK_URL=""
+NOTIFIER_NAME="Zabbix Job Notifier"
+NOTIFIER_AVATAR="https://raw.githubusercontent.com/angelolmg/operation-scripts/refs/heads/main/zabbix/zabbix_logo.jpg"
+
+MAX_EMBED_LENGTH=4000
+
+# ---------------------------
+# Derived variables
+# ---------------------------
+
+SCRIPT_NAME=$(basename "$TARGET_SCRIPT" .sh)
+LOG_FILE="${LOG_DIR}/${SCRIPT_NAME}.log"
+
+HOSTNAME=$(hostname)
+HOST_IP=$(hostname -I | awk '{print $1}')
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
 TMP_OUT=$(mktemp)
 trap 'rm -f "$TMP_OUT"' EXIT
 
-# Server info
-SERVER_IP=$(hostname -I | awk '{print $1}')
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+# ---------------------------
+# Execute script
+# ---------------------------
 
-# Run the target script and capture output and exit code
-"$SCRIPT_PATH" $SCRIPT_ARGS 2>&1 | tee -a "$LOG_FILE" > "$TMP_OUT"
+"$TARGET_SCRIPT" $TARGET_ARGS 2>&1 | tee -a "$LOG_FILE" > "$TMP_OUT"
 EXIT_CODE=${PIPESTATUS[0]}
 OUTPUT=$(cat "$TMP_OUT")
 
-# Determine embed color based on success/failure
-if [ $EXIT_CODE -eq 0 ]; then
-    COLOR=3066993  # green
+# ---------------------------
+# Status & color
+# ---------------------------
+
+if [ "$EXIT_CODE" -eq 0 ]; then
     STATUS="SUCCESS"
+    COLOR=3066993      # green
 else
-    COLOR=15158332 # red
     STATUS="FAILURE"
+    COLOR=15158332     # red
 fi
 
-# Discord embed constraints
-MAX_LENGTH=4000  # leave buffer below 4096 chars
+# ---------------------------
+# Send Discord embed
+# ---------------------------
 
-# Function to send one embed chunk
 send_embed() {
     local chunk="$1"
+
     PAYLOAD=$(jq -n \
-        --arg username "Zabbix Job Notifier" \
-        --arg avatar "https://raw.githubusercontent.com/angelolmg/operation-scripts/refs/heads/main/zabbix/zabbix_logo.png" \
+        --arg username "$NOTIFIER_NAME" \
+        --arg avatar "$NOTIFIER_AVATAR" \
         --arg script "$SCRIPT_NAME" \
-        --arg content "$chunk" \
-        --arg ip "$SERVER_IP" \
-        --arg ts "$TIMESTAMP" \
         --arg status "$STATUS" \
+        --arg content "$chunk" \
+        --arg host "$HOSTNAME" \
+        --arg ip "$HOST_IP" \
+        --arg ts "$TIMESTAMP" \
         --argjson color "$COLOR" \
     '{
       username: $username,
       avatar_url: $avatar,
-      content: "\($script): \($status)",
+      content: "\($script) — \($status)",
       embeds: [
         {
-          title: "",
           description: $content,
           color: $color,
           fields: [
-            {name: "Server IP", value: $ip, inline: true},
+            {name: "Host", value: $host, inline: true},
+            {name: "IP", value: $ip, inline: true},
             {name: "Timestamp", value: $ts, inline: true},
             {name: "Status", value: $status, inline: true}
           ]
         }
       ]
     }')
-    curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK_URL"
+
+    curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK_URL" >/dev/null
 }
 
-# Split output into chunks
+# ---------------------------
+# Chunk output and send
+# ---------------------------
+
 start=0
-len=${#OUTPUT}
-while [ $start -lt $len ]; do
-    chunk="${OUTPUT:$start:$MAX_LENGTH}"
+length=${#OUTPUT}
+
+while [ $start -lt $length ]; do
+    chunk="${OUTPUT:$start:$MAX_EMBED_LENGTH}"
     send_embed "$chunk"
-    start=$((start + MAX_LENGTH))
+    start=$((start + MAX_EMBED_LENGTH))
 done
+
+exit "$EXIT_CODE"

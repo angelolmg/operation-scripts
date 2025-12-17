@@ -1,89 +1,174 @@
 #!/bin/bash
-# netbox-check-update.sh — verifica se há nova versão do NetBox no GitHub com base no link simbólico
+# netbox-check-update.sh
+# Dry-run by default. Use --execute to apply changes.
 
-set -euo pipefail
+set -eo pipefail
 
-NETBOX_DIR="/opt/netbox"
+# ---------------------------
+# Mode control
+# ---------------------------
+
+DRY_RUN=true
+if [[ "${1:-}" == "--execute" ]]; then
+    DRY_RUN=false
+fi
+
+# ---------------------------
+# Configuration
+# ---------------------------
+
+NETBOX_SYMLINK="/opt/netbox"
 GITHUB_API="https://api.github.com/repos/netbox-community/netbox/releases/latest"
 
+LOG_DIR="/var/log/NetboxUpdateLog"
+LOG_FILE="${LOG_DIR}/netbox_update.log"
+mkdir -p "$LOG_DIR"
 
-LOG_FOLDER="/var/log/NetboxUpdateLog"
-LOG_FILE="$LOG_FOLDER/Netbox_update.log"
-mkdir -p "$LOG_FOLDER"
+# ---------------------------
+# Logging
+# ---------------------------
 
-# Extrai versão do link simbólico
-REAL_PATH=$(readlink -f "$NETBOX_DIR")
-CURRENT_VERSION=$(basename "$REAL_PATH" | sed 's/^netbox-//')
-
-# Obtém a versão mais recente do GitHub
-LATEST_VERSION=$(curl -s "$GITHUB_API" | grep '"tag_name":' | head -n 1 | cut -d '"' -f4 | sed 's/^v//')
-
-
-# --- Functions ---
-# Logging function
 log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a "$LOG_FILE"
 }
 
-# Verifica se o link simbólico existe
-if [ ! -L "$NETBOX_DIR" ]; then
-  log_message "Erro: $NETBOX_DIR não é um link simbólico."
-  exit 1
+# ---------------------------
+# Mode info
+# ---------------------------
+
+if $DRY_RUN; then
+    log_message "INFO: Running in DRY-RUN mode. No changes will be applied."
+else
+    log_message "WARNING: Running in EXECUTE mode. Changes WILL be applied."
 fi
 
-log_message "Versão instalada: $CURRENT_VERSION"
-log_message "Última versão disponível: $LATEST_VERSION"
+# ---------------------------
+# Sanity checks
+# ---------------------------
 
-if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
-    log_message "🔔 Uma nova versão do NetBox está disponível!" 
-    
-    log_message "🔔 Uma nova versão do NetBox está disponível!"
-    log_message "Iniciando o UPGRADE ⬆️"
-    FROM="$CURRENT_VERSION"
-    TO="$LATEST_VERSION"
-    NETBOX_DIR="/opt/netbox"
-    BACKUP_DIR="/opt/netbox-backups/$(date +%F_%T)$LATEST_VERSION"
-    mkdir -p "$BACKUP_DIR"
-    
-    log_message "Iniciando upgrade de NetBox $FROM para $TO..."
-    log_message "⭐ Fazendo backup em $BACKUP_DIR..."
-    pg_dump -U netbox -h localhost -Fc netbox >> "$BACKUP_DIR/netbox_$FROM.dump"
+if [[ ! -L "$NETBOX_SYMLINK" ]]; then
+    log_message "ERROR: $NETBOX_SYMLINK is not a symbolic link."
+    exit 1
+fi
 
-    mkdir -p "$NETBOX_DIR/netbox/media"
-    cp -pr "$NETBOX_DIR/netbox/media" "$BACKUP_DIR/"
-    cp -r "$NETBOX_DIR/netbox/scripts" "$BACKUP_DIR/"
-    cp -r "$NETBOX_DIR/netbox/reports" "$BACKUP_DIR/"
-    log_message "✅ Backup concluído com sucesso!"
+# ---------------------------
+# Detect versions
+# ---------------------------
 
-    log_message "⭐ Baixando NetBox v$TO..."
-    wget -q "https://github.com/netbox-community/netbox/archive/v$TO.tar.gz" -O "/tmp/netbox-$TO.tar.gz"
-    sudo tar -xzf "/tmp/netbox-$TO.tar.gz" -C /opt
-    sudo ln -sfn "/opt/netbox-$TO" "$NETBOX_DIR"
-    log_message "✅ Baixado com sucesso!"
+REAL_PATH=$(readlink -f "$NETBOX_SYMLINK")
+CURRENT_VERSION=$(basename "$REAL_PATH" | sed 's/^netbox-//')
 
-    log_message "⭐ Migrando configurações e dados customizados..."
-    sudo cp "/opt/netbox-$FROM/local_requirements.txt" "$NETBOX_DIR/"
-    sudo cp "/opt/netbox-$FROM/netbox/netbox/configuration.py" "$NETBOX_DIR/netbox/netbox/"
-    sudo cp "/opt/netbox-$FROM/netbox/netbox/ldap_config.py" "$NETBOX_DIR/netbox/netbox/"
-    sudo cp "/opt/netbox-$FROM/gunicorn.py" "$NETBOX_DIR/"
-    sudo cp -r "/opt/netbox-$FROM/netbox/scripts" "$NETBOX_DIR/netbox/"
-    sudo cp -r "/opt/netbox-$FROM/netbox/reports" "$NETBOX_DIR/netbox/"
-    sudo cp -r "/opt/netbox-$FROM/local" "$NETBOX_DIR/"
-    sudo cp -pr "/opt/netbox-$FROM/netbox/media" "$NETBOX_DIR/netbox/"
-    sudo rm -rf "$NETBOX_DIR/netbox/static/netbox_topology_views/" && cp -r "/opt/netbox-$FROM/netbox/static/netbox_topology_views" "$NETBOX_DIR/netbox/static/" 
-    sudo chown netbox:netbox -R /opt/netbox
-    log_message "✅ Migrado com sucesso!"
+LATEST_VERSION=$(curl -fsSL "$GITHUB_API" \
+    | grep '"tag_name":' \
+    | head -n 1 \
+    | cut -d '"' -f4 \
+    | sed 's/^v//')
 
-    log_message "⭐ Executando upgrade.sh..."
-    cd "$NETBOX_DIR"
-    sudo ./upgrade.sh
-    log_message "Reiniciando serviços NetBox..."
-    sudo systemctl restart netbox netbox-rq
-    sudo chown netbox:netbox -R /opt/netbox/
-    log_message "✅ Upgrade concluído com sucesso!"
+log_message "Installed version: $CURRENT_VERSION"
+log_message "Latest available version: $LATEST_VERSION"
 
-else
-    log_message "✅ NetBox está atualizado."
+# ---------------------------
+# Compare versions
+# ---------------------------
+
+if [[ "$CURRENT_VERSION" == "$LATEST_VERSION" ]]; then
+    log_message "NetBox is already up to date."
     exit 0
 fi
+
+log_message "New NetBox version detected."
+
+FROM="$CURRENT_VERSION"
+TO="$LATEST_VERSION"
+BACKUP_DIR="/opt/netbox-backups/$(date +%F_%H-%M-%S)_to_${TO}"
+
+# ---------------------------
+# Backup
+# ---------------------------
+
+if $DRY_RUN; then
+    log_message "[DRY RUN] Would create backup directory: $BACKUP_DIR"
+    log_message "[DRY RUN] Would dump PostgreSQL database"
+    log_message "[DRY RUN] Would backup media, scripts, reports"
+else
+    log_message "Creating backup directory: $BACKUP_DIR"
+    mkdir -p "$BACKUP_DIR"
+
+    log_message "Backing up PostgreSQL database..."
+    pg_dump -U netbox -h localhost -Fc netbox > "$BACKUP_DIR/netbox_${FROM}.dump"
+
+    cp -pr "$NETBOX_SYMLINK/netbox/media"   "$BACKUP_DIR/"
+    cp -pr "$NETBOX_SYMLINK/netbox/scripts" "$BACKUP_DIR/"
+    cp -pr "$NETBOX_SYMLINK/netbox/reports" "$BACKUP_DIR/"
+
+    log_message "Backup completed successfully."
+fi
+
+# ---------------------------
+# Download & extract
+# ---------------------------
+
+ARCHIVE="/tmp/netbox-${TO}.tar.gz"
+TARGET_DIR="/opt/netbox-${TO}"
+
+if $DRY_RUN; then
+    log_message "[DRY RUN] Would download NetBox v$TO"
+    log_message "[DRY RUN] Would extract to $TARGET_DIR"
+    log_message "[DRY RUN] Would update symlink $NETBOX_SYMLINK → $TARGET_DIR"
+else
+    log_message "Downloading NetBox v$TO..."
+    wget -q "https://github.com/netbox-community/netbox/archive/v${TO}.tar.gz" -O "$ARCHIVE"
+
+    tar -xzf "$ARCHIVE" -C /opt
+    ln -sfn "$TARGET_DIR" "$NETBOX_SYMLINK"
+fi
+
+# ---------------------------
+# Migrate configuration
+# ---------------------------
+
+if $DRY_RUN; then
+    log_message "[DRY RUN] Would migrate configuration and custom files"
+else
+    log_message "Migrating configuration and custom files..."
+
+    cp "/opt/netbox-${FROM}/local_requirements.txt" "$NETBOX_SYMLINK/"
+    cp "/opt/netbox-${FROM}/netbox/netbox/configuration.py" "$NETBOX_SYMLINK/netbox/netbox/"
+    cp "/opt/netbox-${FROM}/netbox/netbox/ldap_config.py" "$NETBOX_SYMLINK/netbox/netbox/"
+    cp "/opt/netbox-${FROM}/gunicorn.py" "$NETBOX_SYMLINK/"
+
+    cp -r "/opt/netbox-${FROM}/netbox/scripts" "$NETBOX_SYMLINK/netbox/"
+    cp -r "/opt/netbox-${FROM}/netbox/reports" "$NETBOX_SYMLINK/netbox/"
+    cp -r "/opt/netbox-${FROM}/local" "$NETBOX_SYMLINK/"
+    cp -pr "/opt/netbox-${FROM}/netbox/media" "$NETBOX_SYMLINK/netbox/"
+
+    rm -rf "$NETBOX_SYMLINK/netbox/static/netbox_topology_views/"
+    cp -r "/opt/netbox-${FROM}/netbox/static/netbox_topology_views" \
+          "$NETBOX_SYMLINK/netbox/static/"
+
+    chown -R netbox:netbox /opt/netbox*
+
+    log_message "Configuration migrated successfully."
+fi
+
+# ---------------------------
+# Upgrade & restart
+# ---------------------------
+
+if $DRY_RUN; then
+    log_message "[DRY RUN] Would run upgrade.sh"
+    log_message "[DRY RUN] Would restart NetBox services"
+else
+    log_message "Running NetBox upgrade.sh..."
+    cd "$NETBOX_SYMLINK"
+    ./upgrade.sh
+
+    log_message "Restarting NetBox services..."
+    systemctl restart netbox netbox-rq
+
+    chown -R netbox:netbox /opt/netbox*
+    log_message "Upgrade completed successfully."
+fi
+
+exit 0
 
