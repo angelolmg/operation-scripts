@@ -22,12 +22,5 @@
 #
 # m h  dom mon dow   command
 
-# Friday at 23:00 PM
-0 23 * * 5 /home/dtcnt/scripts/zabbix_notify_wrapper.sh /home/dtcnt/scripts/zabbix_partition_maintenance.sh --execute
-
-# Saturday at 01:00 AM
-0 1 * * 6 /home/dtcnt/scripts/zabbix_notify_wrapper.sh /home/dtcnt/scripts/zabbix_montly_backup.sh --execute
-
-# Everyday as 07:00 AM
-0 7 * * * /home/dtcnt/scripts/zabbix_notify_wrapper.sh /home/dtcnt/scripts/zabbix_vm_health.sh
-
+# Monday and Thursday at 08:00 AM
+0 8 * * 1,4 cd /opt && bash netbox_autoUpdater.sh
