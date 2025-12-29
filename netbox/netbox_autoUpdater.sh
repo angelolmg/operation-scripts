@@ -100,6 +100,7 @@ else
     cp -pr "$NETBOX_SYMLINK/netbox/media"   "$BACKUP_DIR/"
     cp -pr "$NETBOX_SYMLINK/netbox/scripts" "$BACKUP_DIR/"
     cp -pr "$NETBOX_SYMLINK/netbox/reports" "$BACKUP_DIR/"
+    cp -pr "$NETBOX_SYMLINK/netbox/static/netbox_topology_views" "$BACKUP_DIR/"
 
     log_message "Backup completed successfully."
 fi
@@ -143,7 +144,7 @@ else
     cp -pr "/opt/netbox-${FROM}/netbox/media" "$NETBOX_SYMLINK/netbox/"
 
     rm -rf "$NETBOX_SYMLINK/netbox/static/netbox_topology_views/"
-    cp -r "/opt/netbox-${FROM}/netbox/static/netbox_topology_views" \
+    cp -r "/opt/netbox-${FROM}/netbox/static/netbox_topology_views/" \
           "$NETBOX_SYMLINK/netbox/static/"
 
     chown -R netbox:netbox /opt/netbox*

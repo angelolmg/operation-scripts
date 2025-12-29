@@ -22,5 +22,8 @@
 #
 # m h  dom mon dow   command
 
-# Monday and Thursday at 08:00 AM
-0 8 * * 1,4 cd /opt && bash netbox_autoUpdater.sh
+# Wednesday at 04:00 AM
+0 4 * * 3 /opt/netbox_notify_wrapper.sh /opt/netbox_autoUpdater.sh --execute
+
+# Everyday as 07:00 AM
+0 7 * * * /opt/netbox_notify_wrapper.sh /opt/netbox_vm_health.sh
