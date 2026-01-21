@@ -162,7 +162,7 @@ if $DRY_RUN; then
 else
     log_message "Running NetBox upgrade.sh..."
     cd "$NETBOX_SYMLINK"
-    ./upgrade.sh
+    sudo PYTHON=/usr/bin/python3.12 ./upgrade.sh
 
     log_message "Restarting NetBox services..."
     systemctl restart netbox netbox-rq
